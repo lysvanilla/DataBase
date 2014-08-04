@@ -1,0 +1,416 @@
+oracle性能测试最常使用V$视图学习（1） ( Tue, 7 Jul 2009 16:34:44 +0800 ) 
+Description:
+涛涛oracle学习笔记之性能动态视图V$
+
+试验环境：oracle10g                          和9i或者更早的8在V$视图会有变动，这里是以10g为主
+
+自上一篇罗列了oracle大致会用到的一些视图，针对不同的逻辑组成。可参看：http://blog.163.com/lht821008/blog/static/41647862009613571023/
+
+这篇笔记是在上一篇的基础上，直接对最常使用的v$视图做详细解释，针对其中关键列意义做一些说明，也会写进一些我实际中的例子。
+
+v$lock视图
+反映内容：该视图展示当前保持的锁信息；
+名称                                                类型                                      说明部分
+-----------------------------------------  ----------------------------    ********************************
+ADDR                                               RAW(4)                      //锁状态对象地址
+KADDR                                              RAW(4)                    //锁地址
+SID                                                NUMBER                       //保持锁的会话的会话标识符
+TYPE                                               VARCHAR2(2)           //锁类型 TM:dml排队TX:事务排队UL:用户提供
+ID1                                                NUMBER                      //锁标示1                      
+ID2                                                NUMBER                      //锁标示2
+LMODE                                              NUMBER                //会话保持的锁的模式 0，1，2，3，4，5，6
+REQUEST                                            NUMBER             //进程请求锁定时所处的模式
+CTIME                                              NUMBER               //当前的锁模式所消耗的时间
+BLOCK                                              NUMBER              //阻塞其他锁
+
+0，1，2，3，4，5，6解释：0代表无，1代表空(null)，2代表行(ss)，3代表行(sx)，4共享S，5S/行X(SSX)，6独占；
+通过这个视图你能初步了解锁的模式，从而判断锁会出现的地方；
+     2. v$PROCESS视图
+放映内容：包含有关当前活动进程的信息；
+SQL> desc v$process
+ 名称                                               类型                                     说明部分
+ -----------------------------------------  ----------------------------      ********************************
+ ADDR                                               RAW(4)                       //进程对象状态地址
+ PID                                                NUMBER                       //oracle进程标识符，类似于序号
+ SPID                                               VARCHAR2(12)           //操作系统进程标识符，可以用来和操作系统进程联系
+ USERNAME                                           VARCHAR2(15)    //操作系统进程用户名
+ SERIAL#                                            NUMBER                  //进程序列号
+ TERMINAL                                           VARCHAR2(16)      //操作系统终端标示符
+ PROGRAM                                            VARCHAR2(64)    //进程中的程序
+ TRACEID                                            VARCHAR2(255)     //跟踪文件标识符
+ BACKGROUND                                         VARCHAR2(1)   //1表示后台进程，null表示其它
+ LATCHWAIT                                          VARCHAR2(8)  //进程正在等待锁的地址；如果该值为n/a，则锁地址为null
+ LATCHSPIN                                          VARCHAR2(8)  //进程正在轮循的锁的地址，如果该职位n/a，则为地址nill
+ PGA_USED_MEM                                       NUMBER   //当前正在使用的pga内存
+ PGA_ALLOC_MEM                                      NUMBER  //当前已经分配的pga内存
+ PGA_FREEABLE_MEM                                   NUMBER  //可以释放的已分配的pga内存
+ PGA_MAX_MEM                                        NUMBER  //曾经需要的最大的最大pga内存
+
+这个视图分很有用，可以和操做系统联系，这样用来诊断跟踪顶级系统资源使用很有益处。这里就可以有个案例，经常用到的，通过消耗资源做大的系统进程号的到执行的sql语句，需要结合v$session视图一起来完成；
+
+     3.v$session
+反映内容：列出连接到实例的会话，这个视图有非常多的信息字段也比较多。
+SQL> desc v$session
+ 名称                                               类型
+----------------------------------------- ------------
+SADDR                                          RAW(4)                    session地址
+SID                                                NUMBER                    session标识符
+SERIAL#                                        NUMBER                    session会话序列号
+AUDSID                                         NUMBER                     审计的会话id
+PADDR                                          RAW(4)                      拥有该会话的oracle进程号和v$process联系
+USER#                                          NUMBER                      oracle用户
+USERNAME                                   VARCHAR2(30)          oracle用户名
+COMMAND                                       NUMBER                   执行的命令
+OWNERID                                         NUMBER                   会话的所有者
+TADDR                                            VARCHAR2(8)            事务地址
+LOCKWAIT                                      VARCHAR2(8)           锁等待地址，null if none
+STATUS                                        VARCHAR2(8)               会话的状态：active,inactive,killed,cached,sniped
+SERVER                                             VARCHAR2(9)          服务的类型，共享还是专用服务器
+SCHEMA#                                            NUMBER                 用户标示模式
+SCHEMANAME                                VARCHAR2(30)           用户模式名称
+OSUSER                                             VARCHAR2(30)         客户端操作系统名称
+PROCESS                                       VARCHAR2(12)             操作系统客户端进程号
+MACHINE                                            VARCHAR2(64)          操作系统机器名称
+TERMINAL                                           VARCHAR2(16)         操作系统终端名
+PROGRAM                                      VARCHAR2(64)              操作系统程序名
+TYPE                                               VARCHAR2(10)               session种类
+SQL_ADDRESS                                RAW(4)                             当前回话识别目前执行的sql语句的表示地址
+SQL_HASH_VALUE                  NUMBER                           和sql_address一起唯一标示一条执行的sql语句
+SQL_ID                                             VARCHAR2(13)         目前被执行的sql语句的标识符
+SQL_CHILD_NUMBER                      NUMBER                     目前被执行的sql语句的子句数量
+PREV_SQL_ADDR                              RAW(4)                 与sql_hash_value一起标示上一条被执行的sql语句
+PREV_HASH_VALUE                      NUMBER                      与PREV_SQL_ADDR 一起表示上一条被执行的sql语句
+PREV_SQL_ID                              VARCHAR2(13)                前一条被执行的sql语句
+PREV_CHILD_NUMBER                    NUMBER                      上一条被执行的sql的子句数量
+MODULE                                             VARCHAR2(48)           这个没太懂，oracle文档上面的解释比较清楚
+MODULE_HASH                            NUMBER                           这是针对上面一个字段的hash value
+ACTION         VARCHAR2(32)    当前 正在执行被DBMS_APPLICATION_INFO.SET_ACTION procedure调用名称
+ACTION_HASH                                 NUMBER           针对上一字段name的hash value
+CLIENT_INFO                      VARCHAR2(64)       由APPLICATION_INFO.SET_ACTION procedure设定的过程名
+FIXED_TABLE_SEQUENCE    NUMBER   oracle文档有着详细的解释session活动增长记录，最好再去看oracle文档
+ROW_WAIT_OBJ#          NUMBER      对象id，对象是table包含行源数据在OW_WAIT_ROW#中的id标识符
+ROW_WAIT_FILE#  NUMBER    标示数据文件，等待在OW_WAIT_ROW#中的row，这些行包含在这些数据文件中
+ROW_WAIT_BLOCK#               NUMBER     表示数据块，这些数据块中行源等待在OW_WAIT_ROW#中   
+ROW_WAIT_ROW#                NUMBER       目前被锁定的行
+LOGON_TIME                        DATE              time of logon
+LAST_CALL_ET  NUMBER  当前session为active时 记录的是session是session编程active状态来的运行时间，相反则为inactive的时间
+PDML_ENABLED                     VARCHAR2(3)            已经被PDML_STATUS字段所取代
+FAILOVER_TYPE                      VARCHAR2(13)         
+ 这是oracle文档对以上这个字段的解释：
+Indicates whether and to what extent transparent application failover
+(TAF) is enabled for the session:
+■ NONE - Failover is disabled for this session
+■ SESSION - Client is able to fail over its session following a disconnect
+■ SELECT - Client is able to fail over queries in progress as well
+See Also:
+■ Oracle Database Concepts for more information on TAF
+■ Oracle Database Net Services Administrator's Guide for information on
+configuring TAF
+FAILOVER_METHOD                 VARCHAR2(10)
+oracle文档的解释：
+Indicates the transparent application failover method for the session:
+■ NONE - Failover is disabled for this session
+■ BASIC - Client itself reconnects following a disconnect
+■ PRECONNECT - Backup instance can support all connections from
+every instance for which it is backed up
+FAILED_OVER                          VARCHAR2(3)         //判定是否session已经处于失败状态，yes或者no
+RESOURCE_CONSUMER_GROUP                   VARCHAR2(32)          当前session用户的源数据组
+PDML_STATUS                        VARCHAR2(8)             
+oracle的文档解释：
+If ENABLED, the session is in a PARALLEL DML enabled mode. If
+DISABLED, PARALLEL DML enabled mode is not supported for the
+session. If FORCED, the session has been altered to force PARALLEL DML.
+PDDL_STATUS                        VARCHAR2(8)            
+oracle文档解释：
+If ENABLED, the session is in a PARALLEL DDL enabled mode. If
+DISABLED, PARALLEL DDL enabled mode is not supported for the
+session. If FORCED, the session has been altered to force PARALLEL DDL
+PQ_STATUS                       VARCHAR2(8)             
+oracle文档解释：
+If ENABLED, the session is in a PARALLEL QUERY enabled mode. If
+DISABLED, PARALLEL QUERY enabled mode is not supported for the
+session. If FORCED, the session has been altered to force PARALLEL
+QUERY.
+CURRENT_QUEUE_DURATION              NUMBER         if 1则session已经在队列中，if 0 则还未形成排队
+CLIENT_IDENTIFIER                  VARCHAR2(64)       客户端session标识符
+BLOCKING_SESSION_STATUS               VARCHAR2(11)         
+oracle文档资料注解：
+Blocking session status:
+■ VALID
+■ NO HOLDER
+■ GLOBAL
+■ NOT IN WAIT
+■ UNKNOWN
+BLOCKING_INSTANCE                NUMBER    模块化的实例标识符
+BLOCKING_SESSION             NUMBER       模块化的session标识符
+SEQ#                   NUMBER         不唯一的标示每个等待的序列号
+EVENT#            NUMBER               事件数量
+EVENT                     VARCHAR2(64)     oracle的session正在等待的数据或者事件
+P1TEXT                       VARCHAR2(64)       首个附加参数的描述
+P1                                     NUMBER            首个附加参数
+P1RAW                      RAW(4)              首个附加参数和前一个区别我还不是很懂
+P2TEXT                     VARCHAR2(64)       第二个附加参数的描述
+P2                              NUMBER            第二个附加参数
+P2RAW                     RAW(4)         第二个附加参数
+P3TEXT               VARCHAR2(64)   第三个附加参数的描述
+P3                                  NUMBER    第三个附加参数
+P3RAW                    RAW(4)    第三个附加参数
+WAIT_CLASS_ID            NUMBER   标记等待事件种类
+WAIT_CLASS#                      NUMBER        等待事件的种类
+WAIT_CLASS                       VARCHAR2(64)      等待事件的名称
+WAIT_TIME                           NUMBER           非0代表上一次session上次等待时间，0代表session当前正在等待
+SECONDS_IN_WAIT                  NUMBER       
+oracle文档的资料：
+If WAIT_TIME = 0, then SECONDS_IN_WAIT is the seconds spent in the
+current wait condition. If WAIT_TIME > 0, then SECONDS_IN_WAIT is the
+seconds since the start of the last wait, and SECONDS_IN_WAIT - WAIT_
+TIME / 100 is the active seconds since the last wait ended.
+STATE                VARCHAR2(19)         
+oracle资料文档：
+Wait state:
+■ 0 - WAITING (the session is currently waiting)
+■ -2 - WAITED UNKNOWN TIME (duration of last wait is unknown)
+■ -1 - WAITED SHORT TIME (last wait <1/100th of a second)
+■ >0 - WAITED KNOWN TIME (WAIT_TIME = duration of last wait)
+SERVICE_NAME                   VARCHAR2(64)      session的服务名称
+SQL_TRACE                          VARCHAR2(8)     标示sql是否能被跟踪   
+SQL_TRACE_WAITS                VARCHAR2(5)     标记是否等待事件被跟踪
+SQL_TRACE_BINDS                VARCHAR2(5)         标记是否绑定跟踪可用与否
+
+4.v$SQL
+反映内容：包括查询游标等级的详细信息，可以用来找到负责解析游标的会话或者人；同样也有着繁多的信息字段，我下面只拿出一些常用的关键的列：
+SQL> desc v$sql;
+ 名称                                                类型
+ -----------------------------------------  ------------
+ SQL_TEXT                            VARCHAR2(1000） sql语句的前1千个字符
+ SQL_FULLTEXT                         CLOB               sql语句的全部分，作为一个clob字段
+ SQL_ID                                    VARCHAR2(13)       sql与在liberary cache中的parent cursor的标识符
+ SHARABLE_MEM                     NUMBER               被子cursor所使用的共享内存的和bytes
+ PERSISTENT_MEM                   NUMBER              整个生命周期child cursor所使用的固定内存的大小bytes        
+ USERS_OPENING                   NUMBER
+ FETCHES                                    NUMBER          这条sql语句返回的数据行数量
+ EXECUTIONS                               NUMBER         library cache中这条sql语句被执行的次数
+ USERS_EXECUTING                      NUMBER       执行这条sql语句的用户的数量
+ LOADS                                       NUMBER           sql或者object被装载load或者被reloaded次数
+ FIRST_LOAD_TIME             VARCHAR2(38)        parent cursor创建的时间
+ INVALIDATIONS                     NUMBER             this child cursor 曾经无效的数量
+ PARSE_CALLS                    NUMBER               做语法分析调用child cursor的次数
+ DISK_READS                       NUMBER               直接做磁盘读取的次数
+ DIRECT_WRITES                     NUMBER            直接做磁盘写的次数
+ BUFFER_GETS                        NUMBER           逻辑读次数
+ APPLICATION_WAIT_TIME               NUMBER     应用等待时间 单位微秒
+ CLUSTER_WAIT_TIME                   NUMBER       集群等待时间 单位微妙
+ USER_IO_WAIT_TIME                NUMBER          用户由于I/O造成等待时间
+ PLSQL_EXEC_TIME                      NUMBER          plsql程序执行时间 单位微秒
+ ROWS_PROCESSED                 NUMBER            通过语法分析的sql返回的数据总行数  
+ OPTIMIZER_MODE               VARCHAR2(10)        优化器选择方式
+ OPTIMIZER_COST             NUMBER                     采用上面指定优化器所要花费的代价    
+ HASH_VALUE                       NUMBER         Hash value of the parent statement in the library cache
+ SERVICE                    VARCHAR2(64)       服务名，能够知道是oracle用户进程做得还是oracle后台进程
+ CPU_TIME NUMBER   CPU time (in microseconds) used by this cursor for parsing, executing,and fetching
+ ELAPSED_TIME      NUMBER   用在解析，分析，取回返回数据所使用的总的时间
+ REMOTE                                             VARCHAR2(1)    是否是远程调用
+ LAST_LOAD_TIME                                     VARCHAR2(38)       上次加载时间
+ CHILD_LATCH                                        NUMBER        受保护的子闩锁数量
+ LAST_ACTIVE_TIME                                   DATE       上次活动时间
+ BIND_DATA                                          RAW(2000)     绑定数据
+这个视图，你能很容易的得到造成过多的解析、物理读、物理写、逻辑读等待sql语句；对于查找低效率sql语句很方便；在我这里有一些我使用例子：http://lht821008.blog.163.com/blog/static/4164786200952421933603/
+
+5、v$event_name
+反映内容：所有等待事件以及相关参数(p1-p3的定义)，没有全部写出来，只写了最重要的字段
+SQL> desc v$event_name
+ 名称                                                               类型
+ -----------------------------------------------------   --------------------
+ EVENT#                                                         NUMBER           该事件的引用编号
+ EVENT_ID                                                       NUMBER          该事件的标识符
+ NAME                                                           VARCHAR2(64)     oracle针对次事件的名称
+ PARAMETER1                                                VARCHAR2(64)    P1信息的描述
+ PARAMETER2                                              VARCHAR2(64)       P2信息的描述
+ PARAMETER3                                              VARCHAR2(64)       P3信息的描述
+
+6、V$session_event
+反映的内容：最近的所有等待事件的统计信息
+SQL> desc v$session_event
+ 名称                           类型
+ -----------------------      -------- 
+ SID                              NUMBER         标识符
+ EVENT                            VARCHAR2(64)      该事件的名称
+ TOTAL_WAITS                      NUMBER         该会话总的等待次数
+ TOTAL_TIMEOUTS                   NUMBER        该会话在等待事件期间遇到的超时次数
+ TIME_WAITED                      NUMBER             该会话等待该事件所消耗的总时间单位0.01秒
+ AVERAGE_WAIT                     NUMBER         该会话等待该事件所消耗平均等待时间0.01秒
+ MAX_WAIT                         NUMBER         进程必须等待该事件的最大时间总值单位0.01秒
+ EVENT_ID                         NUMBER        等待事件的唯一标识符对应V$event_name表
+
+通过这个动态性能视图，你应该很容易了解到最近常常发生的等待事件的大体情况；
+
+7、v$session_wait
+反映的内容：提供了当前会话的当前等待事件的详细信息
+SQL> desc v$session_wait
+ 名称                    是否为空? 类型
+ ----------------------- -------- ----------------
+ SID                              NUMBER               唯一表示符
+ SEQ#    NUMBER           等待次序的计数器，进程每开始一次新的等待就就增加1
+ EVENT                            VARCHAR2(64)   Resource or event for which the session is waiting
+ P1TEXT                           VARCHAR2(64)    等待事件P1参数名称
+ P1                               NUMBER          p1的值
+ P1RAW                            RAW(4)       p1参数2进制值
+ P2TEXT                           VARCHAR2(64)   等待事件P2参数名称
+ P2                               NUMBER      p2的值
+ P2RAW                            RAW(4)       p2参数2进制值
+ P3TEXT                           VARCHAR2(64)    等待事件P3参数名称
+ P3                               NUMBER     p3的值
+ P3RAW                            RAW(4)         p3参数2进制值
+ WAIT_TIME                        NUMBER  上一次等待持续的时间单位0.01秒
+ SECONDS_IN_WAIT                  NUMBER      等待时间单位秒
+ STATE                            VARCHAR2(19)  指出进程是已经完成了等待还是还在等待
+比如：
+SQL> select event name,p1text p1name,p1 p1value from v$session_wait;
+
+NAME                           P1NAME               P1VALUE
+------------------------------ --------------- ------------
+jobq slave wait                                           0
+SQL*Net message from client    driver id         1111838976
+Streams AQ: qmn slave idle wai                            0
+t
+
+Streams AQ: qmn coordinator id                            0
+le wait
+
+Streams AQ: waiting for time m                            0
+anagement or cleanup tasks
+
+rdbms ipc message              timeout                  100
+rdbms ipc message              timeout                  300
+rdbms ipc message              timeout                  500
+
+很容易看到当前等待事件的情况；
+8、v$system_event
+反映的内容：列出自从实例启动以来的等待事件的统计信息
+SQL> desc v$system_event
+ 名称                       类型
+ ----------------------- -------------------
+ EVENT                            VARCHAR2(64)   等待事件的名称
+ TOTAL_WAITS                      NUMBER         次等待事件的总的等待次数
+ TOTAL_TIMEOUTS                   NUMBER        总的超时等待事件的次数
+ TIME_WAITED                      NUMBER             等待事件的总的等待时间
+ AVERAGE_WAIT                     NUMBER           平均等待时间单位0.01s     
+ EVENT_ID                         NUMBER     等待事件的唯一标示符 和v$event_name中的对应
+
+
+
+
+
+
+
+
+
+
+
+oracle性能测试最常使用V$视图学习（2） ( Wed, 8 Jul 2009 16:43:06 +0800 ) 
+Description:
+涛涛oracle学习笔记之性能动态视图V$
+
+由于163blog限制65000字数，所以就再发一篇了。
+试验环境：oracle10g                          和9i或者更早的8在V$视图会有变动，这里是以10g为主
+
+9、dba_tables
+反映内容：记录数据库表所有信息，这里我也只是列出用于性能测试多的字段
+SQL> desc dba_tables;
+ 名称                        类型
+ -----------------------  -------------
+ OWNER                   NOT NULL VARCHAR2(30)    所有者
+ TABLE_NAME              NOT NULL VARCHAR2(30)   表名
+ TABLESPACE_NAME                  VARCHAR2(30)    表所在的表空间名
+ CLUSTER_NAME                     VARCHAR2(30)      所在集群的名称
+ PCT_FREE                         NUMBER      数据块允许空闲的最小百分比
+ PCT_USED                         NUMBER       数据块允许使用的最大百分比
+ MAX_TRANS                        NUMBER        最大事务数
+ FREELISTS                        NUMBER      被分配给段的空闲进程数量
+ LOGGING                          VARCHAR2(3)        是否记录日志生成重做日志记录
+ NUM_ROWS                         NUMBER          总共有多少行数据记录
+ BLOCKS                           NUMBER           此表使用的块数
+ EMPTY_BLOCKS                     NUMBER        表中从来不没有被使用的空块
+ AVG_SPACE                        NUMBER   表中平均可用空闲空间
+ AVG_SPACE_FREELIST_BLOC          NUMBER  Average freespace of all blocks on a freelist
+ NUM_FREELIST_BLOCKS              NUMBER  空闲列表的块数 
+ CACHE                            VARCHAR2(5)         检查表是否被cache到buffer中
+ TABLE_LOCK                       VARCHAR2(8)       表名表是正在否被锁定
+ SAMPLE_SIZE                      NUMBER            表被分析的比例或者数量
+ LAST_ANALYZED                    DATE                表上一次被分析的时间点
+ NESTED                           VARCHAR2(3)        表是否嵌套
+ BUFFER_POOL                      VARCHAR2(7)      buffer_pool中被用于表块的default、keep、recycle
+ MONITORING                       VARCHAR2(3)     表名表是否正被监控
+
+这个视图非常的有用，一般可以用来作为健康检查，检查数据库表的分析情况等，对于oracle9以后的版本都推荐使用基于成本的优化器cbo，基于规则的优化器逐渐被放弃了，所以分析的了解很重要：
+如下：
+TABLE_NAME                     TABLESPACE_NAME                  PCT_FREE   PCT_USED   NUM_ROWS BUFFER_ SAMPLE_SIZE LAST_ANALYZED
+------------------------------ ------------------------------ ---------- ---------- ---------- ------- ----------- --------------
+LT_LHT_COUNT                   LHT_BBS_SPACE                          10                     8 DEFAULT           8 24-6月 -09
+LT_LHT_CYXX                    LHT_BBS_SPACE                          10                    26 DEFAULT          26 24-6月 -09
+LT_LHT_FLBK                    LHT_BBS_SPACE                          10                     7 DEFAULT           7 24-6月 -09
+LT_LHT_SORT                    LHT_BBS_SPACE                          10                     3 DEFAULT           3 24-6月 -09
+LT_LHT_STYLE                   LHT_BBS_SPACE                          10                    15 DEFAULT          15 24-6月 -09
+LT_LHT_XTYH                    LHT_BBS_SPACE                          10                     6 DEFAULT           6 24-6月 -09
+LT_LHT_ZCYH                    LHT_BBS_SPACE                          10                    36 DEFAULT          36 24-6月 -09
+LT_LHT_FT                      LHT_BBS_SPACE                          10                    24 DEFAULT          24 24-6月 -09
+LT_LHT_HT                      LHT_BBS_SPACE                          10                    21 DEFAULT          21 24-6月 -09
+TEST                           LHT_BBS_SPACE                          10                     0 DEFAULT           0 29-6月 -09
+TEST_LOG                       LHT_BBS_SPACE                          10                     6 DEFAULT           6 29-6月 -09
+
+可以清晰的了解到裱褙分析的情况，如果LAST_ANALYZED没有值或者时间很早了，那就必须重新的分析这张表得到更为准确统计信 息，SAMPLE_SIZE代表分析的采样值，如果不合理也可以在分析的时候作调整，这些检查有利于却确定基于成本的优化器能够按照最优化的路经化最小的 成本来完成操作和响应。
+
+既然对于dba_tables有这样应用，那么dba_indexes也就有同样的使用方式了，索引和表达大同小异就不再说了。
+
+9、V$SGA_TARGET_ADVICE
+采用动态sga内存管理，但是你希望能知道如何设置这个最大大小才合适呢，那可以采用这个视图；
+SQL> desc V$SGA_TARGET_ADVICE
+ 名称                         类型
+ ----------------------- ------------------------
+ SGA_SIZE                         NUMBER     sga大小
+ SGA_SIZE_FACTOR                  NUMBER  此表中的sga_size和当前的parameter中的sga大小的比值
+ ESTD_DB_TIME                     NUMBER           
+ ESTD_DB_TIME_FACTOR              NUMBER
+ ESTD_PHYSICAL_READS              NUMBER  估计的物理读的次数
+比如：
+SQL> select sga_size,sga_size_factor,estd_db_time,estd_db_time_factor,estd_physical_reads from V$SGA_TARGET_ADVICE;
+
+  SGA_SIZE SGA_SIZE_FACTOR ESTD_DB_TIME ESTD_DB_TIME_FACTOR ESTD_PHYSICAL_READS
+---------- --------------- ------------ ------------------- -------------------
+       276               1          154                   1               10828
+       138              .5          191              1.2403               12666
+       207             .75          154                   1               10828
+       552               2          154                   1               10828
+       414             1.5          154                   1               10828
+       483            1.75          154                   1               10828
+       345            1.25          154                   1               10828
+
+已选择7行。
+可以发现当sga设置为207M或者更大的时候就没有性能上的提升了，所以最大也就设置为207左右是比较合适的。
+
+10、 V$pga_TARGET_ADVICE
+结合9的sga设置pga的pga_target_max设置同样可以采用这样的方式；
+SQL> desc V$pga_TARGET_ADVICE
+ 名称                                                       类型
+ -----------------------------------------          --------------------------
+ PGA_TARGET_FOR_ESTIMATE                            NUMBER   pga设置大小bytes
+ PGA_TARGET_FACTOR                                  NUMBER          与当前parameter中设置的值的比例
+ ADVICE_STATUS        VARCHAR2(3)      表名advice是否课可采用on/off，取决于STATISTICS_LEVEL
+ BYTES_PROCESSED                  NUMBER     被所有的进程所占用的资源bytes
+ ESTD_EXTRA_BYTES_RW             NUMBER   被估计的用于读和写的资源占用
+ ESTD_PGA_CACHE_HIT_PERCENTAGE  NUMBER     估计的命中率，当PGA_TARGET_FOR_ESTIMATE等于实际设置的pgaparameter时
+ ESTD_OVERALLOC_COUNT    NUMBER  这里的值如果为零表示pga设置足够大，非零说明pga的设置不是足够大的
+QL> select * from  V$pga_TARGET_ADVICE;
+
+GA_TARGET_FOR_ESTIMATE PGA_TARGET_FACTOR ADV BYTES_PROCESSED ESTD_EXTRA_BYTES_RW ESTD_PGA_CACHE_HIT_PERCENTAGE ESTD_OVERALLOC_COU
+T
+---------------------- ----------------- --- --------------- ------------------- ----------------------------- ------------------
+-
+              11927552              .125 ON        202396672             6168576                            97
+4
+              23855104               .25 ON        202396672                   0                           100
+0
+              47710208                .5 ON        202396672                   0                           100
+
+
+
